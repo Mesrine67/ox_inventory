@@ -209,6 +209,61 @@ local function refreshShops()
 	end
 end
 
+local timerChoosePayment
+
+local function isInTable(tbl, val)
+    for _, v in pairs(tbl) do
+        if v == val then
+            return true
+        end
+    end
+    return false
+end
+
+lib.callback.register('ox_inventory:choosePaymentMethod', function(wlCurrency, noCurrency, societyData)
+    if type(wlCurrency) == 'string' then wlCurrency = {wlCurrency} end
+    if type(noCurrency) == 'string' then noCurrency = {noCurrency} end
+    if not noCurrency and (not wlCurrency or #wlCurrency == 0) then wlCurrency = {'money', 'bank'} end
+    if timerChoosePayment and timerChoosePayment:getTimeLeft('ms') then timerChoosePayment:forceEnd(false) end
+    local paymentMethods = {
+        {value = 'money', label = locale('money')},
+        {value = 'bank', label = locale('bank')},
+        {value = 'black_money', label = locale('black_money')},
+    }
+    if societyData.isboss then
+        table.insert(paymentMethods, { value = 'society', label = locale('society_payment', societyData.label) })
+    end
+    if wlCurrency then
+        for i = #paymentMethods, 1, -1 do
+            if not isInTable(wlCurrency, paymentMethods[i].value) then
+                table.remove(paymentMethods, i)
+            end
+        end
+    end
+    if noCurrency then
+        for i = #paymentMethods, 1, -1 do
+            if isInTable(noCurrency, paymentMethods[i].value) then
+                table.remove(paymentMethods, i)
+            end
+        end
+    end
+    local input = lib.inputDialog(locale('choose_payment_method'), {
+        { type = 'select', label = locale('payment_method'), options = paymentMethods, required = true }
+    })
+    timerChoosePayment = lib.timer(45000, function()
+        if input == nil or input[1] == nil or input[1] == '' then
+            lib.closeInputDialog()
+            return nil
+        end
+    end, true)
+    if input and input[1] then
+        return input[1]
+    else
+        return nil
+    end
+end)
+
+
 return {
 	refreshShops = refreshShops,
 	wipeShops = wipeShops,

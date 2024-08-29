@@ -97,6 +97,69 @@ function server.isPlayerBoss(playerId, group, grade)
     return QBX:IsGradeBoss(group, grade)
 end
 
+--- Retrieves the job data of a player.
+---@param playerId number The ID of the player whose job data is to be retrieved.
+---@return table The job data including name, label, grade, and isboss status.
+function server.getplayerDataJob(playerId)
+    local player = QBX:GetPlayer(playerId)
+    if player and player.PlayerData and player.PlayerData.job then
+        local dataJob = player.PlayerData.job
+        return {
+            name = dataJob.name,
+            label = dataJob.label,
+            grade = {
+                level = dataJob.grade.level,
+                name = dataJob.grade.name
+            },
+            isboss = dataJob.isboss
+        }
+    end
+end
+
+--- Gets the player's bank balance.
+---@param playerId number The ID of the player.
+---@return number The bank balance of the player.
+function server.getPlayerBankBalance(playerId)
+    local player = QBX:GetPlayer(playerId)
+    return player.PlayerData.money.bank
+end
+
+--- Removes money from a player's bank account.
+---@param playerId number The ID of the player.
+---@param amount number The amount of money to remove.
+---@return boolean Indicates if the money was successfully removed.
+function server.removePlayerBankMoney(playerId, amount)
+    local player = QBX:GetPlayer(playerId)
+    return player.Functions.RemoveMoney('bank', amount, 'ox-shop')
+end
+
+--- Retrieves the balance of the player's society account.
+---@param playerId number The ID of the player.
+---@return number The balance of the player's society account.
+function server.getPlayerSocietyBalance(playerId)
+    local player = QBX:GetPlayer(playerId)
+    local jobName = player.PlayerData.job.name
+    local accountRB = exports['Renewed-Banking']:getAccountMoney(jobName) or 0
+    return accountRB
+end
+
+--- Removes money from a player's society account.
+---@param playerId number The ID of the player.
+---@param amount number The amount of money to remove.
+---@return boolean Indicates if the money was successfully removed.
+function server.removePlayerSocietyMoney(playerId, amount)
+    local player = QBX:GetPlayer(playerId)
+    local playerName = player.PlayerData.name
+    local jobName = player.PlayerData.job.name
+	local withdrawSuccess = exports['Renewed-Banking']:removeAccountMoney(jobName, amount)
+	if withdrawSuccess then
+		exports['Renewed-Banking']:handleTransaction(jobName, 'Retrait du compte professionnel', -amount, 'Achat effectué du compte professionnel via un commerce', 'Système de travail', playerName, 'withdraw')
+    else
+        return false
+    end
+    return true
+end
+
 ---@param entityId number
 ---@return number | string
 ---@diagnostic disable-next-line: duplicate-set-field

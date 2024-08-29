@@ -154,16 +154,39 @@ lib.callback.register('ox_inventory:openShop', function(source, data)
 end)
 
 local function canAffordItem(inv, currency, price)
-	local canAfford = price >= 0 and Inventory.GetItemCount(inv, currency) >= price
-
-	return canAfford or {
-		type = 'error',
-		description = locale('cannot_afford', ('%s%s'):format((currency == 'money' and locale('$') or math.groupdigits(price)), (currency == 'money' and math.groupdigits(price) or ' '..Items(currency).label)))
-	}
+    local canAfford
+    if currency == 'society' then
+        local accountSociety = server.getPlayerSocietyBalance(inv.player.source)
+        canAfford = price >= 0 and accountSociety >= price
+    elseif currency == 'bank' then
+        local getPlayerBankBalance = server.getPlayerBankBalance(inv.player.source)
+        canAfford = price >= 0 and getPlayerBankBalance >= price
+    elseif currency == 'money' or currency == 'black_money' then
+        canAfford = price >= 0 and Inventory.GetItem(inv, currency, false, true) >= price
+    end
+    local currencyLabel
+    if currency == 'money' then
+        currencyLabel = locale('$')
+    elseif currency == 'black_money' then
+        currencyLabel = locale('black_money')
+    elseif currency == 'bank' then
+        currencyLabel = locale('bank')
+    elseif currency == 'society' then
+        currencyLabel = locale('society')
+    else
+        currencyLabel = Items(currency).label
+    end
+    return canAfford or {type = 'error', description = locale('cannot_afford', ('%s %s'):format(math.groupdigits(price), currencyLabel))}
 end
 
 local function removeCurrency(inv, currency, price)
-	Inventory.RemoveItem(inv, currency, price)
+	if currency == 'society' then
+		server.removePlayerSocietyMoney(inv.player.source, price)
+	elseif currency == 'bank' then
+		server.removePlayerBankMoney(inv.player.source, price)
+	elseif currency == 'money' or currency == 'black_money' then
+		Inventory.RemoveItem(inv, currency, price)
+	end
 end
 
 local TriggerEventHooks = require 'modules.hooks.server'
@@ -180,6 +203,8 @@ local function isRequiredGrade(grade, rank)
 		return rank >= grade
 	end
 end
+
+local usePaymentMethodConvar = GetConvar('inventory:choosePaymentMethod', 'false') == 'true'
 
 lib.callback.register('ox_inventory:buyItem', function(source, data)
 	if data.toType == 'player' then
@@ -198,6 +223,8 @@ lib.callback.register('ox_inventory:buyItem', function(source, data)
 		local shop = shopId and Shops[shopType][shopId] or Shops[shopType]
 		local fromData = shop.items[data.fromSlot]
 		local toData = playerInv.items[data.toSlot]
+        local noCurrency = fromData.noCurrency or Shops[shopType].noCurrency
+		local currency = fromData.currency or Shops[shopType].currency
 
 		if fromData then
 			if fromData.count then
@@ -219,7 +246,18 @@ lib.callback.register('ox_inventory:buyItem', function(source, data)
 				end
 			end
 
-			local currency = fromData.currency or 'money'
+            local selectedMethod
+			if usePaymentMethodConvar then
+				local infoJob = server.getplayerDataJob(source)
+				selectedMethod = lib.callback.await('ox_inventory:choosePaymentMethod', source, currency, noCurrency, infoJob)
+				if not selectedMethod then
+					return false, false, { type = 'error', description = 'Méthode de paiement non sélectionnée.' }
+                else
+                    currency = selectedMethod
+                end
+			end
+
+			currency = currency or 'money'
 			local fromItem = Items(fromData.name)
 
 			local result = fromItem.cb and fromItem.cb('buying', fromItem, playerInv, data.fromSlot, shop)
@@ -267,8 +305,17 @@ lib.callback.register('ox_inventory:buyItem', function(source, data)
 				end
 
 				if server.syncInventory then server.syncInventory(playerInv) end
-
-				local message = locale('purchased_for', count, metadata?.label or fromItem.label, (currency == 'money' and locale('$') or math.groupdigits(price)), (currency == 'money' and math.groupdigits(price) or ' '..Items(currency).label))
+                local currencyLabel = Items(currency).label
+				if currency == 'money' then
+					currencyLabel = locale('$')
+				elseif currency == 'black_money' then
+					currencyLabel = locale('black_money')
+				elseif currency == 'bank' then
+					currencyLabel = locale('bank')
+				elseif currency == 'society' then
+					currencyLabel = locale('society')
+				end
+				local message = locale('purchased_for', count, metadata?.label or fromItem.label, math.groupdigits(price), currencyLabel)
 
 				if server.loglevel > 0 then
 					if server.loglevel > 1 or fromData.price >= 500 then
