@@ -4,7 +4,7 @@ return {
 		blip = {
 			id = 59, colour = 69, scale = 0.8
 		}, inventory = {
-			{ name = 'burger', price = 10 },
+			{ name = 'burger', price = 10, currency = 'society' },
 			{ name = 'water', price = 10 },
 			{ name = 'cola', price = 10 },
 		}, locations = {
